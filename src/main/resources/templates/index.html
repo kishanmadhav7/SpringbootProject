@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ToDo Terminal</title>
+    <style>
+        @import url('https://fonts.cdnfonts.com/css/azeret-mono');
+        :root { --color: #ff0077; --color-dim: #ff007766; }
+        *, *::before, *::after { box-sizing: border-box; padding: 0; margin: 0; }
+        body { background-color: #000; display: grid; place-items: center; height: 100vh; width: 100vw; overflow: hidden; font-family: 'azeret mono', monospace; color: #fff; }
+        #view { position: absolute; z-index: -1; top: 0; left: 0; width: 100%; height: 100%; }
+        .floating-window { background-color: #040404; border-radius: 20px; border: 1px solid var(--color); padding: 20px; box-shadow: inset 1px 1px 1px rgba(255, 255, 255, .025); width: 800px; max-width: 95%; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 99; transform: scale(.8); }
+        .main-content { display: flex; flex-direction: column; align-items: flex-start; width: 100%; position: relative; z-index: 2; }
+        .header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px; }
+        .header-main { display: flex; flex-direction: column; align-items: flex-start; }
+        .header-main h1 { font-size: 2em; letter-spacing: 3px; font-weight: bold; }
+        .header-main .user-info { font-size: 0.9em; color: #888; }
+        .countdown-container { text-align: center; width: 100%; margin-bottom: 20px; font-size: 1.2em; letter-spacing: 2px; color: var(--color); }
+        .countdown-container #next-task-name { color: #fff; font-weight: bold; }
+        .countdown-container #timer { font-weight: bold; }
+        .controls { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+        .input-group { display: flex; flex-wrap: wrap; gap: 10px; }
+        .input-group input[type="text"] { flex-grow: 1; min-width: 200px; }
+        .input-group input { background-color: transparent; border: 1px solid var(--color); color: #aaa; padding: 10px; border-radius: 5px; font-size: 0.9em; font-family: 'azeret mono', monospace; }
+        .input-group input:focus { outline: none; border-color: #fff; }
+        input[type="datetime-local"] { color-scheme: dark; }
+        .btn { background-color: transparent; border: 1px solid var(--color); color: var(--color); padding: 10px 15px; border-radius: 5px; cursor: pointer; text-decoration: none; font-family: 'azeret mono', monospace; font-size: 0.9em; transition: all 0.2s ease; white-space: nowrap; }
+        .btn:hover { background-color: var(--color); color: #040404; box-shadow: 0 0 10px var(--color); }
+        .btn-sm { padding: 5px 10px; font-size: 0.8em; }
+        .btn-logout { border-color: #555; color: #888; }
+        .btn-logout:hover { background-color: #555; color: #fff; }
+        .todo-list { list-style: none; width: 100%; margin-top: 20px; max-height: 250px; overflow-y: auto; padding-right: 10px; }
+        .todo-list li { background-color: rgba(255, 255, 255, 0.05); padding: 10px 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-left: 3px solid var(--color); transition: border-color 0.3s; }
+        .item-details { display: flex; flex-direction: column; gap: 5px; }
+        .item-text { word-break: break-all; }
+        .due-date { font-size: 0.8em; color: #888; }
+        .item-text.completed { text-decoration: line-through; color: #888; }
+        li.completed { border-left-color: #555; }
+        li.completed .due-date { text-decoration: line-through; }
+        .actions { display: flex; gap: 10px; margin-left: 15px; }
+    </style>
+</head>
+<body>
+    <canvas id="view"></canvas>
+    <div class="floating-window">
+        <div class="main-content">
+            <div class="header">
+                <div class="header-main">
+                    <h1>ToDo_Terminal</h1>
+                    <div class="user-info">
+                        <span>User: </span>
+                        <span sec:authentication="name"></span>
+                    </div>
+                </div>
+                <!-- Logout Button Form -->
+                <form th:action="@{/logout}" method="post">
+                    <button type="submit" class="btn btn-logout">Logout</button>
+                </form>
+            </div>
+
+            <div class="countdown-container">
+                <span>Next task: </span><span id="next-task-name">None</span><span> in </span><span id="timer">--:--:--:--</span>
+            </div>
+
+            <div class="controls">
+                <form action="#" th:action="@{/save}" method="post" class="input-group">
+                    <input type="text" name="title" placeholder="> Add new task..." required autocomplete="off" />
+                    <input type="datetime-local" name="dueDate" required />
+                    <button type="submit" class="btn">Execute</button>
+                </form>
+            </div>
+
+            <ul class="todo-list">
+                <li th:each="item : ${items}" 
+                    th:classappend="${item.completed} ? 'completed' : ''"
+                    th:attr="data-due-date=${item.dueDate != null ? #temporals.format(item.dueDate, 'yyyy-MM-dd''T''HH:mm:ss') : ''}, data-title=${item.title}">
+                    <div class="item-details">
+                        <span th:text="${item.title}" class="item-text" th:classappend="${item.completed} ? 'completed' : ''"></span>
+                        <span class="due-date" th:if="${item.dueDate}" th:text="'Due: ' + ${#temporals.format(item.dueDate, 'dd-MMM-yyyy HH:mm')}"></span>
+                    </div>
+                    <div class="actions">
+                        <a th:href="@{/edit/{id}(id=${item.id})}" class="btn btn-sm">Edit</a>
+                        <a th:if="${!item.completed}" th:href="@{/complete/{id}(id=${item.id})}" class="btn btn-sm">Done</a>
+                        <a th:href="@{/delete/{id}(id=${item.id})}" class="btn btn-sm">Del</a>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <script>
+        // Countdown timer script...
+        document.addEventListener('DOMContentLoaded', () => {
+            const timerElement = document.getElementById('timer');
+            const nextTaskNameElement = document.getElementById('next-task-name');
+            let countdownInterval;
+
+            function findNextTask() {
+                const now = new Date();
+                let nextTask = null;
+                
+                document.querySelectorAll('.todo-list li:not(.completed)').forEach(item => {
+                    const dueDateStr = item.dataset.dueDate;
+
+                    if (dueDateStr) {
+                        const dueDate = new Date(dueDateStr);
+                        if (dueDate > now) {
+                            if (!nextTask || dueDate < nextTask.dueDate) {
+                                nextTask = {
+                                    dueDate: dueDate,
+                                    title: item.dataset.title
+                                };
+                            }
+                        }
+                    }
+                });
+                
+                return nextTask;
+            }
+
+            function startCountdown() {
+                const nextTask = findNextTask();
+
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                }
+
+                if (!nextTask) {
+                    nextTaskNameElement.textContent = 'None';
+                    timerElement.textContent = '--:--:--:--';
+                    return;
+                }
+
+                nextTaskNameElement.textContent = `"${nextTask.title}"`;
+
+                countdownInterval = setInterval(() => {
+                    const now = new Date().getTime();
+                    const distance = nextTask.dueDate.getTime() - now;
+
+                    if (distance < 0) {
+                        clearInterval(countdownInterval);
+                        timerElement.textContent = "EXPIRED";
+                        setTimeout(startCountdown, 2000); 
+                        return;
+                    }
+
+                    const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+                    const format = (num) => num.toString().padStart(2, '0');
+                    timerElement.textContent = `${format(days)}:${format(hours)}:${format(minutes)}:${format(seconds)}`;
+
+                }, 1000);
+            }
+
+            startCountdown();
+        });
+
+        // Background animation script
+        eval(atob("KCgpPT57bGV0IHY9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInZpZXciKSx4PXYuZ2V0Q29udGV4dCgiMmQiKSxkcHI9d2luZG93LmRldmljZVBpeGVsUmF0aW98fDEsYj1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCJjYW52YXMiKSx5PWIuZ2V0Q29udGV4dCgiMmQiKSxXLEgsUj0oKT0+e1c9aW5uZXJXaWR0aCpkcHI7SD1pbm5lckhlaWdodCpkcHI7di53aWR0aD1XO3YuaGVpZ2h0PUg7Yi53aWR0aD1XcjI7Yi5oZWlnaHQ9SCoyfTtSKCk7b25yZXNpemU9UjtsZXQgc3Q9e3RyOltdLGpuOltdLGxpbToxODAsY29sOihnZXRDb21wdXRlZFN0eWxlKGRvY3VtZW50LmRvY3VtZW50RWxlbWVudCkuZ2V0UHJvcGVydHlWYWx1ZSgiLS1jb2xvciIpfHwiIikudHJpbSgpfHwwfSxyPShhPTEsYj0wKT0+TWF0aC5yYW5kb20oKSooYS1iKStiLGNoPWE9PmFbTWF0aC5mbG9vcihNYXRoLnJhbmRvbSgpKmEubGVuZ3RoKV07ZnVuY3Rpb24gbWsocCxhKXtsZXQgcz1wfHx7eDpyKGIud2lkdGgpLHk6cihiLmhlaWdodCl9LGFuZz1hPz9jaChbMCw5MCwxODAsMjcwXSksTDE9cigxMDAsNjApLHAxPXt4OnMueCtNYXRoLmNvcyhhbmcqTWF0aC5QSS8xODApKkwxLHk6cy55K01hdGguc2luKGFuZypNYXRoLlBJLzE4MCkqTDF9LHQ9Y2goWzQ1LC00NV0pLHAyPXt4OnAxLngrTWF0aC5jb3MoKGFuZyt0KSpNYXRoLlBJLzE4MCkqcigxNjAsODApLHk6cDEueStNYXRoLnNpbigoYW5nK3QpKk1hdGguUEkvMTgwKSpyKDE2MCw4MCl9LHAzPXt4OnAyLngrTWF0aC5jb3MoYW5nKk1hdGguUEkvMTgwKSpyKDIwMCwxMDApLHk6cDIueStNYXRoLnNpbihhbmcqTWF0aC5QSS8xODApKnIoMjAwLDEwMCl9O3JldHVybntwdHM6W3MscDEscDIscDNdLGg6c3QuY29sfHxjaChbMTcwLDE4MCwxOTAsMjAwXSksYjpwZXJmb3JtYW5jZS5ub3coKSxkdDpyKDI1MDAsMTUwMCksaHQ6cigyMDAwLDEwMDApLGZ0OjEyMDAsYnM6MCxiZTowfX1sZXQgbGVuPWE9PntsZXQgbD0wO2ZvcihsZXQgaT0wO2k8YS5sZW5ndGgtMTtpKyspbCs9TWF0aC5oeXBvdChhW2krMV0ueC1hW2ldLngsYVtpKzFdLnktYVtpXS55KTtyZXR1cm4gbH07ZnVuY3Rpb24gZHIodCxuKXtsZXQgQT1uLXQuYixQTD1sZW4odC5wdHMpLGFsPTEscD0wO2lmKEE8dC5kdCl7cD1BL3QuZHQ7YWw9cH1lbHNlIGlmKEE8dC5kdCt0Lmh0KXtwPTF9ZWxzZSBpZihBPHQuZHQrdC5odCt0LmZ0KXtwPTE7YWw9MS0oQS10LmR0LXQuaHQpL3QuZnR9ZWxzZXt0LmQ9MTtyZXR1cm59YWwqPS43O2xldCBETD1QTCpwO3kuc3Ryb2tlU3R5bGU9c3QuY29sfHxgaHNsYSgke3QuaH0sNzAlLDc1JSwke2FsfSlgO3kubGluZVdpZHRoPTIqZHByO3kuc2hhZG93Qmx1cj04O3kuc2hhZG93Q29sb3I9c3QuY29sfHxgaHNsYSgke3QuaH0sNzAlLDg1JSwkey40KmFsfSlgO3kuYmVnaW5QYXRoKCk7eS5tb3ZlVG8odC5wdHNbMF0ueCx0LnB0c1swXS55KTtsZXQgcmVtPURMO2ZvcihsZXQgaT0wO2k8dC5wdHMubGVuZ3RoLTE7aSsrKXtsZXQgQT10LnB0c1tpXSxCPXQucHRzW2krMV0sU0w9TWF0aC5oeXBvdChCLngtQS54LEIueS1BLnkpO2lmKHJlbT49U0wpe3kubGluZVRvKEIueCxCLnkpO3JlbS09U0x9ZWxzZXtsZXQgdHA9cmVtL1NMO3kubGluZVRvKEEueCsoQi54LUEueCkqdHAsQS55KyhCLnktQS55KSp0cCk7YnJlYWt9fXkuc3Ryb2tlKCk7eS5maWxsU3R5bGU9c3QuY29sfHxgaHNsYSgke3QuaH0sNzAlLDg1JSwke2FsfSlgO3kuYmVnaW5QYXRoKCk7eS5hcmModC5wdHNbMF0ueCx0LnB0c1swXS55LDUqZHByLDAsNyk7eS5maWxsKCk7aWYocD49MSl7eS5iZWdpblBhdGgoKTt5LmFyYyh0LnB0c1szXS54LHQucHRzWzNdLnksNypkcHIsMCw3KTt5LmZpbGwoKTtmb3IobGV0IGogb2Ygc3Quam4pe2lmKE1hdGguaHlwb3Qoai54LXQucHRzWzNdLngsai55LXQucHRzWzNdLnkpPDEyKmRwcil7eS5maWxsU3R5bGU9IiNmZmYiO3kuYmVnaW5QYXRoKCk7eS5hcmMoai54LGoueSw4KmRwciwwLDcpO3kuZmlsbCgpO3JldHVybn19c3Quam4ucHVzaCh7eDp0LnB0c1szXS54LHk6dC5wdHNbM10ueX0pO2lmKCF0LmJlKXt0LmJlPTE7aWYoTWF0aC5yYW5kb20oKTwuNClyZXR1cm47aWYoTWF0aC5yYW5kb20oKTwuMDgmJnN0LnRyLmxlbmd0aDxzdC5saW0pe2xldCBkeD10LnB0c1szXS54LXQucHRzWzJdLngsZHk9dC5wdHNbM10ueS10LnB0c1syXS55LGFuZz1NYXRoLmF0YW4yKGR5LGR4KSoxODAvTWF0aC5QSTtmb3IobGV0IG8gb2ZbLTkwLDAsOTBdKXN0LnRyLnB1c2gobWsodC5wdHNbM10sYW5nK28pKX19aWYoIXQuYnMmJk1hdGgucmFuZG9tKCk8LjA4JiZzdC50ci5sZW5ndGg8c3QubGltKXt0LmJzPTE7bGV0IGR4PXQucHRzWzFdLngtdC5wdHNbMF0ueCxkeT10LnB0c1sxXS55LXQucHRzWzBdLnksYW5nPU1hdGguYXRhbjIoZHksZHgpKjE4MC9NYXRoLlBJKzE4MDtmb3IobGV0IG8gb2ZbLTkwLDAsOTBdKXN0LnRyLnB1c2gobWsodC5wdHNbMF0sYW5nK28pKX19fWZ1bmN0aW9uIGNhbShuKXt4LnNldFRyYW5zZm9ybSgxLDAsMCwxLDAsMCk7eC5jbGVhclJlY3QoMCwwLFcsSCk7bGV0IHB4PU1hdGguc2luKG4qLjAwMDIpKjIwMCxweT1NYXRoLmNvcyhuKi4wMDAxNSkqMTUwLHJvdD1NYXRoLnNpbihuKi4wMDAwNykqLjA1LHo9MS4xNSsuMDUqTWF0aC5zaW4obiouMDAwMSk7eC50cmFuc2xhdGUoVy8yLEgvMik7eC5yb3RhdGUocm90KTt4LnNjYWxlKHoseik7eC50cmFuc2xhdGUoLWIud2lkdGgvMitweCwtYi5oZWlnaHQvMitweSl9ZnVuY3Rpb24gcnVuKGNvZGUsbil7Zm9yKGxldCBvcCBvZiBjb2RlKXtpZihvcD09Ik0iJiZzdC50ci5sZW5ndGg8c3QubGltKXN0LnRyLnB1c2gobWsoKSk7aWYob3A9PSJEIil7Zm9yKGxldCBpPXN0LnRyLmxlbmd0aC0xO2k+PTA7aS0tKXtkcihzdC50cltpXSxuKTtpZihzdC50cltpXS5kKXN0LnRyLnNwbGljZShpLDEpfX1pZihvcD09IkMiKWNhbShuKX19ZnVuY3Rpb24gbG9vcChuKXt5LnNldFRyYW5zZm9ybSgxLDAsMCwxLDAsMCk7eS5jbGVhclJlY3QoMCwwLGIud2lkdGgsYi5oZWlnaHQpO2lmKE1hdGgucmFuZG9tKCk8LjAyJiZzdC50ci5sZW5ndGg8c3QubGltKXN0LnRyLnB1c2gobWsoKSk7cnVuKCJEQyIsbik7eC5kcmF3SW1hZ2UoYiwwLDApO3JlcXVlc3RBbmltYXRpb25GcmFtZShsb29wKX1yZXF1ZXN0QW5pbWF0aW9uRnJhbWUobG9vcCl9KSgpOw=="));
+    </script>
+</body>
+</html>
+
